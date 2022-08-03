@@ -56,10 +56,10 @@ const sortClasses = (twContext, classStr) => {
 
   const lRegex = /\$\{([^}]+)\}/g;
   for (const match of classStr.matchAll(lRegex)) {
-    const literal = match[1];
+    const literal = match[0];
     literals.push(literal);
   }
-  for (const literal of literals) classStr.split(literal).join('');
+  for (const literal of literals) classStr = classStr.split(literal).join('');
 
   const classes = classStr.split(/\s+/);
 
@@ -88,7 +88,7 @@ const processFile = async (twContext, fpath, fname, overwrite) => {
   const sRegex = /\s+className='([^']+)'/g;
   const bbRegex = /\s+className={`([^`]+)`}/g;
   const bsRegex = /\s+className={'([^']+)'}/g;
-  const vRegex = /lassName[s]{0, 1} = '([^']+)'/g;
+  const vRegex = /lassName[s]{0,1} = '([^']+)'/g;
   //const regex4 = /tailwind\('([^'])'\)/g;
   const regexes = [dRegex, sRegex, bbRegex, bsRegex, vRegex];
 
@@ -98,7 +98,8 @@ const processFile = async (twContext, fpath, fname, overwrite) => {
 
   const outs = [];
   const lines = fs.readFileSync(fpath, 'utf-8').trim().split('\n');
-  for (let line of lines) {
+  for (const line of lines) {
+    let out = line;
     for (const regex of regexes) {
       for (const match of line.matchAll(regex)) {
         const classStr = match[1];
@@ -108,12 +109,11 @@ const processFile = async (twContext, fpath, fname, overwrite) => {
           console.log(`A: ${classStr}`);
           console.log(`B: ${sortedClassStr}`);
           console.log('');
-          line.split(classStr).join(sortedClassStr);
+          out = out.split(classStr).join(sortedClassStr);
         }
       }
     }
-
-    outs.push(line);
+    outs.push(out);
   }
 
   if (overwrite) {
@@ -122,36 +122,40 @@ const processFile = async (twContext, fpath, fname, overwrite) => {
   console.log('');
 };
 
-const traverse = async (twConfigFPath, componentsDir) => {
-  const twContext = await getTwContext(twConfigFPath);
-
+const traverse = async (twContext, componentsDir) => {
   let lstat = fs.lstatSync(componentsDir)
   if (!lstat.isDirectory()) {
     console.log(`${componentsDir} is not a directory!`);
     return;
   }
 
-  const children = fs.readdirSync(componentsDir);
-  for (const child of children) {
-    const fpath = path.join(componentsDir, child);
+  const fnames = fs.readdirSync(componentsDir);
+  for (const fname of fnames) {
+    const fpath = path.join(componentsDir, fname);
     lstat = fs.lstatSync(fpath);
     if (!lstat.isFile()) {
       console.log(`${fpath} is not a file!`);
       continue;
     }
 
-    await processFile(twContext, fpath, child, false);
-
-
-    break;
+    await processFile(twContext, fpath, fname, false);
   }
 };
 
 const main = async () => {
+  /*for (const repo of repos) {
+    const twContext = await getTwContext(repo.twFPath);
+    await traverse(twContext, repo.componentsDir);
+  }*/
 
-  for (const repo of repos) await traverse(repo.twFPath, repo.componentsDir);
+  const repo = repos[0];
+  const twContext = await getTwContext(repo.twFPath);
+
+  const fname = 'ListNamesPopup.js';
+  const fpath = path.join(repo.componentsDir, fname);
+  await processFile(twContext, fpath, fname, false);
+
   console.log('Finished.');
 };
-
 
 main();
