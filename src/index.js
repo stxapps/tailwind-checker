@@ -11,11 +11,12 @@ const baseDir = '/home/linux/Drive/Workspace';
 const repos = [
   {
     twConfigFPath: `${baseDir}/brace-client/packages/web/tailwind.config.js`,
-    twCssFPath: `${baseDir}/brace-client/packages/web/tailwind.css`,
+    twCssFPath: `${baseDir}/brace-client/packages/web/src/stylesheets/tailwind.css`,
     componentsDir: `${baseDir}/brace-client/packages/web/src/components`,
   },
   {
-    twConfigFPath: `${baseDir}/brace-client/packages/mobile/tailwind.config.js`,
+    //twConfigFPath: `${baseDir}/brace-client/packages/mobile/tailwind.config.js`,
+    twConfigFPath: `${baseDir}/brace-client/packages/web/tailwind.config.js`,
     twCssFPath: `${baseDir}/brace-client/packages/mobile/tailwind.css`,
     componentsDir: `${baseDir}/brace-client/packages/mobile/src/components`,
   },
@@ -25,10 +26,18 @@ const repos = [
     componentsDir: `${baseDir}/justnote-client/packages/web/src/components`,
   },
   {
-    twConfigFPath: `${baseDir}/justnote-client/packages/mobile/tailwind.config.js`,
+    //twConfigFPath: `${baseDir}/justnote-client/packages/mobile/tailwind.config.js`,
+    twConfigFPath: `${baseDir}/justnote-client/packages/web/tailwind.config.js`,
     twCssFPath: `${baseDir}/justnote-client/packages/mobile/tailwind.css`,
     componentsDir: `${baseDir}/justnote-client/packages/mobile/src/components`,
   },
+];
+
+const IGNORE_UNKNOWN_CLASS_NAMES = [
+  'lds-ellipsis', 'lds-rotate', 'square-spin',
+  'ball-clip-rotate', 'blk:ball-clip-rotate-blk',
+  'aspect-7/12', 'shadow-xs', 'elevation-xl', 'group-s', 'pattern',
+  'preview-mode',
 ];
 
 const bigSign = (value) => {
@@ -43,7 +52,7 @@ const getTwContext = (twConfigFPath, twCssFPath) => {
   return twContext;
 };
 
-const _sortClasses = (twContext, classes) => {
+const _sortClasses = (logs, twContext, classes) => {
   const orders = twContext.getClassOrder(classes);
 
   const knownOrders = [];
@@ -51,7 +60,9 @@ const _sortClasses = (twContext, classes) => {
   for (const order of orders) {
     if (!order[1]) {
       unknownClasses.push(order[0]);
-      console.log('Unknown class: ', order[0]);
+      if (order[0].length > 0 && !IGNORE_UNKNOWN_CLASS_NAMES.includes(order[0])) {
+        logs.push(`Unknown class: ${order[0]}`,);
+      }
     } else knownOrders.push(order);
   }
 
@@ -67,7 +78,7 @@ const _sortClasses = (twContext, classes) => {
   return { sortedClasses, unknownClasses };
 };
 
-const sortClasses = (twContext, classStr) => {
+const sortClasses = (logs, twContext, classStr) => {
   const literals = [];
 
   const lRegex = /\$\{([^}]+)\}/g;
@@ -79,41 +90,24 @@ const sortClasses = (twContext, classStr) => {
 
   const classes = classStr.trim().split(/\s+/);
 
-  const commonClasses = [];
-  const darkClasses = [];
-  for (const className of classes) {
-    if (className.startsWith('dark:')) darkClasses.push(className);
-    else commonClasses.push(className);
-  }
+  const result = _sortClasses(logs, twContext, classes);
 
-  const commonResult = _sortClasses(twContext, commonClasses);
-  const darkResult = _sortClasses(twContext, darkClasses);
-
-  let sortedClassStr = `${commonResult.sortedClasses.join(' ')}`;
-  sortedClassStr += ` ${commonResult.unknownClasses.join(' ')}`;
-  sortedClassStr += ` ${darkResult.sortedClasses.join(' ')}`;
-  sortedClassStr += ` ${darkResult.unknownClasses.join(' ')}`;
+  let sortedClassStr = `${result.sortedClasses.join(' ')}`;
+  sortedClassStr += ` ${result.unknownClasses.join(' ')}`;
   sortedClassStr += ` ${literals.join(' ')}`;
   sortedClassStr = sortedClassStr.replace(/\s\s+/g, ' ').trim();
 
   return sortedClassStr;
 };
 
-const processFile = async (twContext, fpath, fname, overwrite, doInsertTailwind) => {
-  const dRegex = /\s+className=("[^"]+")/g;
-  const sRegex = /\s+className=('[^']+')/g;
-  const bbRegex = /\s+className={(`[^`]+`)}/g;
-  const bsRegex = /\s+className={('[^']+')}/g;
+const processFile = async (twContext, fpath, fname, overwrite) => {
+
   const vRegex = /lassName[s]{0,1} = '([^']+)'/g;
   const tsRegex = /tailwind\('([^']+)'/g;
   const tbRegex = /tailwind\(`([^`]+)`/g;
-  const regexes = [dRegex, sRegex, bbRegex, bsRegex, vRegex, tsRegex, tbRegex];
+  const regexes = [vRegex, tsRegex, tbRegex];
 
-  console.log('------------------------------------------------------------');
-  console.log(`${fname}`);
-  console.log('------------------------------------------------------------');
-
-  const outs = [];
+  const outs = [], logs = [];
   const lines = fs.readFileSync(fpath, 'utf-8').trim().split('\n');
   for (const line of lines) {
     let out = line;
@@ -121,30 +115,13 @@ const processFile = async (twContext, fpath, fname, overwrite, doInsertTailwind)
       for (const match of line.matchAll(regex)) {
         const classStr = match[1];
 
-        if (doInsertTailwind) {
-          const stripClassStr = classStr.slice(1, -1);
-          const sortedClassStr = sortClasses(twContext, stripClassStr);
+        const sortedClassStr = sortClasses(logs, twContext, classStr);
+        if (classStr !== sortedClassStr) {
+          logs.push(`A: ${classStr}`);
+          logs.push(`B: ${sortedClassStr}`);
+          logs.push('');
 
-          console.log(`A: ${classStr}`);
-          console.log(`B: ${sortedClassStr}`);
-          console.log('');
-
-          let twSortedClassStr;
-          if (sortedClassStr.includes('$')) {
-            twSortedClassStr = `{tailwind(\`${sortedClassStr}\`)}`;
-          } else {
-            twSortedClassStr = `{tailwind('${sortedClassStr}')}`;
-          }
-          out = out.split(classStr).join(twSortedClassStr);
-        } else {
-          const sortedClassStr = sortClasses(twContext, classStr);
-          if (classStr !== sortedClassStr) {
-            console.log(`A: ${classStr}`);
-            console.log(`B: ${sortedClassStr}`);
-            console.log('');
-
-            out = out.split(classStr).join(sortedClassStr);
-          }
+          out = out.split(classStr).join(sortedClassStr);
         }
       }
     }
@@ -152,9 +129,16 @@ const processFile = async (twContext, fpath, fname, overwrite, doInsertTailwind)
   }
 
   if (overwrite) {
-    fs.writeFileSync(fpath, outs.join('\n'));
+    fs.writeFileSync(fpath, outs.join('\n') + '\n');
   }
-  console.log('');
+
+  if (logs.length > 0) {
+    console.log('------------------------------------------------------------');
+    console.log(`${fname}`);
+    console.log('------------------------------------------------------------');
+    for (const log of logs) console.log(log);
+    console.log('');
+  }
 };
 
 const traverse = async (twContext, componentsDir) => {
@@ -173,26 +157,15 @@ const traverse = async (twContext, componentsDir) => {
       continue;
     }
 
-    await processFile(twContext, fpath, fname, false, false);
+    await processFile(twContext, fpath, fname, false);
   }
 };
 
 const main = async () => {
-  /*for (const repo of repos) {
+  for (const repo of repos.slice(0, 4)) {
     const twContext = getTwContext(repo.twConfigFPath, repo.twCssFPath);
     await traverse(twContext, repo.componentsDir);
-  }*/
-
-  const repoIndex = 3;
-  const repo = repos[repoIndex];
-  const twContext = getTwContext(repo.twConfigFPath, repo.twCssFPath);
-  const fname = 'NoteEditor.js';
-  const fpath = path.join(repo.componentsDir, fname);
-  const overwrite = true;
-  const doInsertTailwind = [0, 2].includes(repoIndex) ? true : false;
-  //const overwrite = false;
-  //const doInsertTailwind = false;
-  await processFile(twContext, fpath, fname, overwrite, doInsertTailwind);
+  }
 
   console.log('Finished.');
 };
