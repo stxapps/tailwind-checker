@@ -36,7 +36,7 @@ const repos = [
 const IGNORE_UNKNOWN_CLASS_NAMES = [
   'lds-ellipsis', 'lds-rotate', 'square-spin',
   'ball-clip-rotate', 'blk:ball-clip-rotate-blk',
-  'aspect-7/12', 'shadow-xs', 'elevation-xl', 'group-s', 'pattern',
+  'aspect-7/12', 'shadow-xs', 'elevation-lg', 'elevation-xl', 'group-s', 'pattern',
   'preview-mode',
 ];
 
