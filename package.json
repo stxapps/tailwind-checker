@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --experimental-specifier-resolution=node src/index.js"
+    "start": "node --import=specifier-resolution-node/register src/index.js"
   },
   "dependencies": {
     "import-fresh": "^3.3.0",
+    "specifier-resolution-node": "^1.1.1",
     "tailwindcss": "3.2.7"
   }
 }
